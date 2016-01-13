@@ -1,0 +1,45 @@
+﻿1 CMSIS
+其中放的是ARM提供的Cortex核心文件，与器件厂商无关，只与核心结构有关。源于StdLib3.5中的
+	Libraries\CMSIS\CM3\CoreSupport文件夹中的
+		core_cm3.c 
+		core_cm3.h
+		
+	以及Libraries\CMSIS\CM3\DeviceSupport\ST\STM32F10中的
+		stm32f10x.h 
+		system_stm32f10x.c 
+		system_stm32f10x.h
+
+2 LIB
+其中放的是StdLib3.5的库文件，包含了所有外设的.c和.h文件。
+将Libraries\STM32F10x_StdPeriph_Driver中的
+	/inc 
+	/src 
+	两文件夹整体拷贝到其中即可。
+
+3 USER
+包含了中断控制文件、StdLib3.5库的Config文件以及主函数文件。具体源于Project\STM32F10x_StdPeriph_Template中的
+	stm32f10x_it.c 
+	stm32f10x_it.h 
+	stm32f10x_conf.h
+	
+4 MDK
+MDK工程文件以及输出文件的文件夹
+
+Manage Project Items:
+在Target下的各个组add file时，只需添加各个文件夹下的.c文件，特别的，Startup文件夹下的.s文件要对应选择的器件进行添加。
+
+Options for Target:
+1) Preprocessor Symbols:
+	要添加所用器件名称：STM32F103RBT6 (本例用的是这个器件)
+	如果使用StdLib，则需要添加 USE_STDPERIPH_DRIVER 这个宏
+2) Include Paths:
+	/CMSIS
+	/Lib/inc
+	/Startup
+	/USER
+需要添加以上文件夹到搜索路径中
+
+
+How to Use?
+本模板并没有添加Lib中的任何文件，即可以直接操作寄存器，无需使用标准库。
+如果欲使用标准库，则仅需在 Manage Project Items 中把Lib中所用的外设的.c文件add进去即可。
