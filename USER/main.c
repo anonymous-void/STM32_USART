@@ -1,67 +1,145 @@
+
 #include "stm32f10x_rcc.h"
+#include <stdio.h>
 //#include "stm32f10x_gpio.h"
 
 USART_InitTypeDef USART_InitStructure;
 
-
-int main()
-{
-    
-    return 0;
-}
-
-static u8  fac_us=0;//us延时倍乘数
-static u16 fac_ms=0;//ms延时倍乘数
-//初始化延迟函数
-//SYSTICK的时钟固定为HCLK时钟的1/8
-//SYSCLK:系统时钟
-void delay_init(u8 SYSCLK)
-{
-	SysTick->CTRL&=0xfffffffb;//bit2清空,选择外部时钟  HCLK/8
-	fac_us=SYSCLK/8;		    
-	fac_ms=(u16)fac_us*1000;
-}								    
-
-void delay_ms(u16 nms)
-{	 		  	  
-	u32 temp;
-	SysTick->LOAD=(u32)nms*fac_ms;//时间加载(SysTick->LOAD为24bit)
-	SysTick->VAL =0x00;           //清空计数器
-	SysTick->CTRL=0x01 ;          //开始倒数  
-	do
-	{
-		temp=SysTick->CTRL;
-	}
-	while(temp&0x01&&!(temp&(1<<16)));//等待时间到达   
-	SysTick->CTRL=0x00;       //关闭计数器
-    SysTick->VAL =0X00;       //清空计数器	  	    
-} 
 
 void RCC_Configuration(void)
 {
     RCC_DeInit();
     RCC_HSEConfig(RCC_HSE_ON);
     while(RCC_GetFlagStatus(RCC_FLAG_HSERDY) == RESET); // Wait for External Clock stablize.
+
     RCC_HCLKConfig(RCC_SYSCLK_Div1); // Advance High Speed Bus AHB prescaler = /1
-    RCC_PCLK1Config(RCC_HCLK_Div2); // Low-speed peripheral APB1 prescaler = /2
     RCC_PCLK2Config(RCC_HCLK_Div1); // High-speed peripheral APB2 prescaler = /1
+    RCC_PCLK1Config(RCC_HCLK_Div2); // Low-speed peripheral APB1 prescaler = /2
     RCC_PLLConfig(RCC_PLLSource_HSE_Div1, RCC_PLLMul_9); // 
+    
     RCC_PLLCmd( ENABLE );
+    while (RCC_GetFlagStatus(RCC_FLAG_PLLRDY) == RESET);
+    
+    RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);
     while ( RCC_GetSYSCLKSource() != 0x08 );
+    
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB, ENABLE); // GPIO-A and GPIO-B clock Enabled
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);  // USART-1 Enabled
     
 }
 
+
+
 void USART_Configuration(void)
 {
-    USART_InitStructure.USART_BaudRate = 9600;
-    USART_InitStructure.USART_WordLength = USART_StopBits_1;
-    USART_InitStructure.USART_StopBits = USART_StopBits_1;
-    USART_InitStructure.USART_Parity = USART_Parity_No;
-    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
-    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
-    
-    USART_Init(USART1, &USART_InitStructure);
-    USART_Cmd(USART1, ENABLE);
+
+  USART_InitStructure.USART_BaudRate = 9600;
+  USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+  USART_InitStructure.USART_StopBits = USART_StopBits_1;
+  USART_InitStructure.USART_Parity =  USART_Parity_No ;
+  USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+  USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+
+  USART_Init(USART1, &USART_InitStructure);
+  USART_Cmd(USART1, ENABLE);
 }
+
+void GPIO_Configuration(void)
+{
+    //CLK:PB5  CLR:PE11  Data:PE10
+    GPIO_InitTypeDef        GPIO_InitStructure;                //声明一个结构体变量
+
+    //配置USART1_Tx为复合推挽输出
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+    //配置 USART1_Rx 为浮空输入
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+}
+
+
+void Delay_MS(u16 dly)
+{
+        u16 i,j;
+        for(i=0;i<dly;i++)
+        for(j=1000;j>0;j--);
+}
+void delay_us(u16 dly1)
+{
+        u16 i;
+        for(i=dly1;i>0;i--);
+}
+
+
+//加入以下代码,支持printf函数,而不需要选择use MicroLIB 
+#if 1 
+#pragma import(__use_no_semihosting)              
+//标准库需要的支持函数                  
+struct __FILE  
+{  
+int handle;  
+
+};  
+
+FILE __stdout;        
+//定义_sys_exit()以避免使用半主机模式     
+_sys_exit(int x)  
+{  
+x = x;  
+}  
+//重定义fputc函数  
+int fputc(int ch, FILE *f) 
+{       
+
+while((USART1->SR&0X40)==0);//循环发送,直到发送完毕   
+        USART1->DR = (u8) ch;          
+
+return ch; 
+} 
+#endif 
+//加入以上代码,支持printf函数,而不需要选择use MicroLIB 
+
+void Interrupt_Configuration()
+{
+    SCB->AIRCR |= 0xFA05
+}
+
+int main()
+{
+        #ifdef DEBUG
+        debug();
+        #endif
+
+        int i = 0;
+
+        //------------初始化------------
+        RCC_Configuration();
+        GPIO_Configuration();
+        USART_Configuration( );
+        while(1)
+        {
+          Delay_MS(1000);
+          if ( i >= 100 )
+              i = 0;
+          i ++;
+          
+          GPIO_SetBits(GPIOA, GPIO_Pin_8);
+          Delay_MS(1000);
+          printf("%d\r\n", i);
+          GPIO_ResetBits(GPIOA, GPIO_Pin_8);
+          Delay_MS(1000);
+
+
+        }
+}
+
