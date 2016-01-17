@@ -1,10 +1,10 @@
-
 #include "stm32f10x_rcc.h"
 #include <stdio.h>
 //#include "stm32f10x_gpio.h"
 
 USART_InitTypeDef USART_InitStructure;
 
+int keyFlag = 0;
 
 void RCC_Configuration(void)
 {
@@ -60,24 +60,50 @@ void GPIO_Configuration(void)
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-
+    // LED Pin Config
     GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
     GPIO_Init(GPIOA, &GPIO_InitStructure);
+    
+    // 按键PA0，即WK_UP键
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD; // 下拉
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
 }
 
 
-void Delay_MS(u16 dly)
+static u8  fac_us=0;//usÑÓÊ±±¶³ËÊý
+static u16 fac_ms=0;//msÑÓÊ±±¶³ËÊý
+//³õÊ¼»¯ÑÓ³Ùº¯Êý
+//SYSTICKµÄÊ±ÖÓ¹Ì¶¨ÎªHCLKÊ±ÖÓµÄ1/8
+//SYSCLK:ÏµÍ³Ê±ÖÓ
+void delay_init(u8 SYSCLK)
 {
-        u16 i,j;
-        for(i=0;i<dly;i++)
-        for(j=1000;j>0;j--);
-}
-void delay_us(u16 dly1)
-{
-        u16 i;
-        for(i=dly1;i>0;i--);
+	SysTick->CTRL&=0xfffffffb;//bit2Çå¿Õ,Ñ¡ÔñÍâ²¿Ê±ÖÓ  HCLK/8
+	fac_us=SYSCLK/8;		    
+	fac_ms=(u16)fac_us*1000;
+}								    
+//ÑÓÊ±nms
+//×¢ÒânmsµÄ·¶Î§
+//SysTick->LOADÎª24Î»¼Ä´æÆ÷,ËùÒÔ,×î´óÑÓÊ±Îª:
+//nms<=0xffffff*8*1000/SYSCLK
+//SYSCLKµ¥Î»ÎªHz,nmsµ¥Î»Îªms
+//¶Ô72MÌõ¼þÏÂ,nms<=1864 
+void delay_ms(u16 nms)
+{	 		  	  
+	u32 temp;		   
+	SysTick->LOAD=(u32)nms*fac_ms;//Ê±¼ä¼ÓÔØ(SysTick->LOADÎª24bit)
+	SysTick->VAL =0x00;           //Çå¿Õ¼ÆÊýÆ÷
+	SysTick->CTRL=0x01 ;          //¿ªÊ¼µ¹Êý  
+	do
+	{
+		temp=SysTick->CTRL;
+	}
+	while(temp&0x01&&!(temp&(1<<16)));//µÈ´ýÊ±¼äµ½´ï   
+	SysTick->CTRL=0x00;       //¹Ø±Õ¼ÆÊýÆ÷
+	SysTick->VAL =0X00;       //Çå¿Õ¼ÆÊýÆ÷	  	    
 }
 
 
@@ -111,35 +137,87 @@ return ch;
 
 void Interrupt_Configuration()
 {
-    SCB->AIRCR |= 0xFA05
+    u32 tempPriority = 0x0A;
+    // Step 1: Priority Grouping; Refer to PM0056 [Programming Manual], P135
+    u32 VECT_KEY = 0xFA050000;
+    u32 PRIG_GRP = 0x0005 << 8;
+    SCB->AIRCR = (VECT_KEY | PRIG_GRP);
+    
+    // Step 2: Set Preemption priority and Subpriority
+    
+    tempPriority = (tempPriority << 20);
+    NVIC->IP[EXTI0_IRQn] |= 0xA0;
+    
+    // Step 3: Set External Interrupt
+    NVIC->ISER[0] |= 1 << EXTI0_IRQn;
+    
+//    uint32_t priorityEncoder = 0x00;
+//    NVIC_SetPriorityGrouping(5);
+//    NVIC_EnableIRQ(EXTI0_IRQn);
+//    priorityEncoder = NVIC_EncodePriority(EXTI0_IRQn, 2, 2);
+//    NVIC_SetPriority(EXTI0_IRQn, priorityEncoder);
+}
+
+void External_Configuration()
+{
+    u32 temp;
+    // Step 1: 开启复用时钟
+    RCC->APB2ENR |= 0x01;
+    
+    // Step 2: 外部中断配置；设置PA0 pin为外部中断端口
+    temp = AFIO->EXTICR[1];
+    temp &= 0xFFF0;
+    AFIO->EXTICR[1] = temp;
+    
+    // Step 3: 将外部中断对应管脚的Mask取消掉
+    EXTI->IMR |= 1 << 0;
+    
+    // Step 4: 配置2个触发寄存器（上升沿 and 下降沿）
+    EXTI->FTSR |= 1 << 0;
+}
+
+void EXTI0_IRQHandler(void)
+{
+    delay_ms(10);
+    
+        if (keyFlag == 0)
+        {
+            GPIO_SetBits(GPIOA, GPIO_Pin_8);
+            keyFlag = 1;
+        }
+        else
+        {
+            GPIO_ResetBits(GPIOA, GPIO_Pin_8);
+            keyFlag = 0;
+        }
+    EXTI->PR = 1<<0;  //清除Line_0 上的标志位 
 }
 
 int main()
 {
-        #ifdef DEBUG
-        debug();
-        #endif
+    #ifdef DEBUG
+    debug();
+    #endif
 
-        int i = 0;
+    int i = 0;
 
-        //------------初始化------------
-        RCC_Configuration();
-        GPIO_Configuration();
-        USART_Configuration( );
-        while(1)
-        {
-          Delay_MS(1000);
-          if ( i >= 100 )
-              i = 0;
-          i ++;
-          
-          GPIO_SetBits(GPIOA, GPIO_Pin_8);
-          Delay_MS(1000);
-          printf("%d\r\n", i);
-          GPIO_ResetBits(GPIOA, GPIO_Pin_8);
-          Delay_MS(1000);
+    //------------初始化------------
+    RCC_Configuration();
+    delay_init(72);
+    GPIO_Configuration();
+    USART_Configuration();
+    
+    Interrupt_Configuration();
+    External_Configuration();
 
+    while(1)
+    {
+//        if ( i >= 100 )
+//          i = 0;
 
-        }
+//        printf("%d\r\n", i);
+
+//      delay_ms(200);
+    }
 }
 
