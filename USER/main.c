@@ -12,6 +12,9 @@
 #define pin_ARM         PAout(6)
 #define pin_FIRE        PAout(7)
 
+#define RELAY_ON        0
+#define RELAY_OFF       1
+
 // Pressure measurement
 u32 gu32_sensorRead = 0;
 u32 gu32_window_a[10] = {0}, gu32_avrg = 0;
@@ -98,13 +101,13 @@ int main()
         
         if ( 1 == gu8_relayARMState )
         {// Pin output LOW will trigger the relay.
-            pin_ARM = 0; // Relay ON
+            pin_ARM = RELAY_ON ; // Relay ON
             if ( 1 == gu8_relayFireState )
             {
-                pin_FIRE = 0; // Relay ON
+                pin_FIRE = RELAY_ON; // Relay ON
                 delay_ms(500); // After 500 miliseconds, clear both ARM & FIRE flags.
-                pin_ARM = 1; //Relay OFF
-                pin_FIRE = 1;
+                pin_ARM = RELAY_OFF; //Relay OFF
+                pin_FIRE = RELAY_OFF;
                 gu8_relayARMState = 0;
                 gu8_relayFireState = 0;
             }
