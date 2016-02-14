@@ -569,6 +569,11 @@
               <FileType>1</FileType>
               <FilePath>..\USER\gpio.c</FilePath>
             </File>
+            <File>
+              <FileName>interrupt.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\USER\interrupt.c</FilePath>
+            </File>
           </Files>
         </Group>
       </Groups>
